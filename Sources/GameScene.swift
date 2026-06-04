@@ -263,21 +263,26 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private func showIntro() {
         let title = makeLabel("CRYSTAL CAPER", size: 76)
-        title.position = CGPoint(x: 0, y: 80)
+        title.position = CGPoint(x: 0, y: 96)
         title.zPosition = ZLayer.overlay
         title.alpha = 0
         cameraNode.addChild(title)
-        let hint = makeLabel("Collect the crystals · stomp the mushrooms · reach the flag", size: 28)
-        hint.position = CGPoint(x: 0, y: 24)
+        let subtitle = makeLabel("a tiny Agile Lens adventure", size: 30)
+        subtitle.position = CGPoint(x: 0, y: 46)
+        subtitle.zPosition = ZLayer.overlay
+        subtitle.alpha = 0
+        subtitle.fontColor = UIColor(red: 0.75, green: 0.90, blue: 1.0, alpha: 1)
+        cameraNode.addChild(subtitle)
+        let hint = makeLabel("Collect the crystals · stomp the mushrooms · reach the flag", size: 26)
+        hint.position = CGPoint(x: 0, y: 4)
         hint.zPosition = ZLayer.overlay
         hint.alpha = 0
         cameraNode.addChild(hint)
         let appear = SKAction.fadeIn(withDuration: 0.5)
-        let hold = SKAction.wait(forDuration: 2.4)
+        let hold = SKAction.wait(forDuration: 2.6)
         let vanish = SKAction.fadeOut(withDuration: 0.6)
         let done = SKAction.removeFromParent()
-        title.run(.sequence([appear, hold, vanish, done]))
-        hint.run(.sequence([appear, hold, vanish, done]))
+        for node in [title, subtitle, hint] { node.run(.sequence([appear, hold, vanish, done])) }
     }
 
     // MARK: Update loop
@@ -590,7 +595,8 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         state.score += bonus
         updateHUD()
         showOverlay(title: "YOU WIN!",
-                    subtitle: "Score \(state.score)   ·   Gems \(state.gemsCollected)/\(state.totalGems)   ·   Life bonus +\(bonus)")
+                    subtitle: "Score \(state.score)   ·   Gems \(state.gemsCollected)/\(state.totalGems)   ·   Life bonus +\(bonus)",
+                    flavor: "Pip brings the crystals home to Agile Lens HQ.")
     }
 
     private func gameOver() {
@@ -599,7 +605,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         showOverlay(title: "GAME OVER", subtitle: "Score \(state.score)")
     }
 
-    private func showOverlay(title: String, subtitle: String) {
+    private func showOverlay(title: String, subtitle: String, flavor: String? = nil) {
         let node = SKNode()
         node.zPosition = ZLayer.overlay
         let dim = SKSpriteNode(color: UIColor(white: 0, alpha: 0.55),
@@ -607,13 +613,19 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
                                             height: GameConfig.designHeight))
         node.addChild(dim)
         let titleLabel = makeLabel(title, size: 92)
-        titleLabel.position = CGPoint(x: 0, y: 60)
+        titleLabel.position = CGPoint(x: 0, y: 70)
         node.addChild(titleLabel)
         let subLabel = makeLabel(subtitle, size: 32)
-        subLabel.position = CGPoint(x: 0, y: -8)
+        subLabel.position = CGPoint(x: 0, y: 8)
         node.addChild(subLabel)
+        if let flavor {
+            let flavorLabel = makeLabel(flavor, size: 24)
+            flavorLabel.position = CGPoint(x: 0, y: -30)
+            flavorLabel.fontColor = UIColor(red: 0.75, green: 0.90, blue: 1.0, alpha: 1)
+            node.addChild(flavorLabel)
+        }
         let tap = makeLabel("Tap to play again", size: 30)
-        tap.position = CGPoint(x: 0, y: -70)
+        tap.position = CGPoint(x: 0, y: -88)
         tap.alpha = 0.9
         tap.run(.repeatForever(.sequence([.fadeAlpha(to: 0.3, duration: 0.7),
                                           .fadeAlpha(to: 0.9, duration: 0.7)])))

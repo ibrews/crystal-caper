@@ -1,10 +1,12 @@
 # Crystal Caper 🦊💎
 
+**▶ [Play it now in your browser](https://ibrews.github.io/crystal-caper/)** — no install, works on desktop and mobile.
+
 A complete, playable 2D pixel-art **platformer for iOS**, built with SpriteKit — and every sprite, animation, and tile is **AI-generated** via the [PixelLab](https://pixellab.ai) MCP. Run, jump, and stomp your way across a forest level: collect crystals, squash grumpy mushrooms, and reach the goal flag.
 
 It's a showcase of the full **asset → game pipeline**: pixel art is generated on demand, dropped into the project, and wired into a physics-driven game with camera follow, parallax, particles, and a touch + keyboard control scheme.
 
-Built by **Alex Coulombe**.
+Built by **Alex Coulombe** at **[Agile Lens](https://agilelens.com)**.
 
 ![Pip mid-jump over a crystal platform — title screen](docs/screenshots/title-jump.png)
 
@@ -20,7 +22,12 @@ Built by **Alex Coulombe**.
 | **Assets** | PixelLab MCP (characters, animations, tileset) |
 | **Project** | Generated with [XcodeGen](https://github.com/yonaskolb/XcodeGen) |
 
-## Quickstart
+## Play
+
+- **In a browser (anyone, no install):** **[ibrews.github.io/crystal-caper](https://ibrews.github.io/crystal-caper/)** — the full game runs in HTML5/Canvas, reusing the exact same AI-generated art. Desktop: arrow keys / `WASD` + `Space`. Mobile: on-screen ◀ ▶ JUMP.
+- **On iOS (the original SpriteKit build):** follow the Quickstart below.
+
+## Quickstart (iOS / Xcode)
 
 ```bash
 # 1. Generate the Xcode project (project.yml → .xcodeproj)
