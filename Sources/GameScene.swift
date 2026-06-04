@@ -65,6 +65,13 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private var pendingWin = false
     private var pendingBounce = false
     private var collectedGemIDs = Set<ObjectIdentifier>()
+    private var clientIdx = 0
+    private var allGemsCelebrated = false
+    /// Each crystal is dedicated to a real Agile Lens client (editable flavor).
+    private static let clients = ["Epic Games", "Disney", "Royal Caribbean",
+        "Skidmore, Owings & Merrill", "Royal Shakespeare Company", "DBOX", "Cesium",
+        "Dimensional Innovations", "Cooler Screens", "Emperia", "Dan Fink Studio",
+        "Agog", "Britt Design Group", "Fairworlds"]
 
     private var invulnerableUntil: TimeInterval = 0
     private var shakeAmount: CGFloat = 0
@@ -95,6 +102,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         setupHUD()
         setupControls()
         showIntro()
+        startMusic()
 
         if let skView = self.view {
             skView.ignoresSiblingOrder = true
@@ -283,6 +291,14 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         let vanish = SKAction.fadeOut(withDuration: 0.6)
         let done = SKAction.removeFromParent()
         for node in [title, subtitle, hint] { node.run(.sequence([appear, hold, vanish, done])) }
+    }
+
+    private func startMusic() {
+        guard let url = Bundle.main.url(forResource: "music", withExtension: "wav") else { return }
+        let music = SKAudioNode(url: url)
+        music.autoplayLooped = true
+        music.isPositional = false
+        addChild(music)
     }
 
     // MARK: Update loop
@@ -513,7 +529,9 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         for gem in pendingGemPickups {
             gem.physicsBody = nil
             Effects.burst(at: gem.position, in: world, color: cyan, count: 10)
-            Effects.popText("+\(GameConfig.gemScore)", at: gem.position, in: world, color: cyan)
+            let client = Self.clients[clientIdx % Self.clients.count]
+            clientIdx += 1
+            Effects.popText("💎 \(client)", at: gem.position, in: world, color: cyan)
             gem.run(.sequence([.group([.scale(to: 1.8, duration: 0.12),
                                        .fadeOut(withDuration: 0.12)]), .removeFromParent()]))
             state.score += GameConfig.gemScore
@@ -521,6 +539,10 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             Audio.play("sfx_gem.wav", on: self)
         }
         pendingGemPickups.removeAll()
+        if state.gemsCollected == state.totalGems && state.totalGems > 0 && !allGemsCelebrated {
+            allGemsCelebrated = true
+            celebrateAllCrystals()
+        }
 
         for enemy in pendingStompedEnemies {
             Effects.burst(at: enemy.position, in: world,
@@ -577,6 +599,27 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         let count = Int(GameConfig.invulnerability / 0.2)
         player.run(.sequence([.repeat(blink, count: count), .fadeAlpha(to: 1, duration: 0)]),
                    withKey: "blink")
+    }
+
+    /// Fireworks + bonus when every crystal in the level is collected.
+    private func celebrateAllCrystals() {
+        state.score += 500
+        shakeAmount = max(shakeAmount, 6)
+        Audio.play("sfx_win.wav", on: self)
+        Effects.popText("ALL CRYSTALS!  +500",
+                        at: CGPoint(x: player.position.x, y: player.position.y + 90),
+                        in: world, color: .systemYellow)
+        let colors: [UIColor] = [.systemPink, .systemYellow, .systemTeal, .systemGreen, .systemOrange]
+        for i in 0..<6 {
+            run(.sequence([.wait(forDuration: Double(i) * 0.18), .run { [weak self] in
+                guard let self else { return }
+                let pos = CGPoint(x: self.player.position.x + CGFloat.random(in: -320...320),
+                                  y: self.player.position.y + CGFloat.random(in: 40...260))
+                Effects.burst(at: pos, in: self.world,
+                              color: colors.randomElement() ?? .systemYellow,
+                              count: 16, speed: 240, scale: 2.6)
+            }]))
+        }
     }
 
     private func winLevel() {
