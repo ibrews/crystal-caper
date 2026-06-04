@@ -1,0 +1,13 @@
+# Xcode / build
+build/
+DerivedData/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcuserstate
+.DS_Store
+
+# XcodeGen generates the project; keep it out of source control
+CrystalCaper.xcodeproj/
+
+# Raw asset downloads (working cache before integration)
+_assets_raw/
