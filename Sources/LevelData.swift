@@ -48,4 +48,60 @@ enum LevelData {
             EnemyDef(spawnCol: 52, row: 3, minCol: 47, maxCol: 58)
         ]
     )
+
+    /// Pick the level definition for level `n` (1 = hand-authored, 2+ generated).
+    static func forLevel(_ n: Int) -> LevelDef { n <= 1 ? level1 : generate(level: n) }
+
+    /// Procedurally generate level `n` (n >= 2), difficulty scaling with `n`.
+    /// Mirrors the web build's `genLevel` for parity.
+    static func generate(level n: Int) -> LevelDef {
+        var rng = SeededRNG(seed: UInt64(7919 + n * 101))
+        func r() -> Double { rng.nextDouble() }
+        func ri(_ a: Int, _ b: Int) -> Int { a + Int(r() * Double(b - a + 1)) }
+        let surf = 3
+        var platforms: [PlatformDef] = []
+        var gems: [GemDef] = []
+        var enemies: [EnemyDef] = []
+        var w = ri(8, 10)
+        platforms.append(PlatformDef(col: 0, row: 0, w: w, h: 3))
+        var col = w
+        let sections = 5 + min(9, n + 2)
+        let maxGap = min(5, 2 + (n >> 1))
+        var enemyBudget = min(2 + n, 11)
+        for _ in 0..<sections {
+            let gap = ri(2, maxGap); col += gap
+            w = ri(6, 10)
+            platforms.append(PlatformDef(col: col, row: 0, w: w, h: 3))
+            if r() < 0.85 {
+                gems.append(GemDef(col: col - Int((Double(gap) / 2).rounded(.up)), row: surf + 2))
+            }
+            for _ in 0..<ri(1, 3) { gems.append(GemDef(col: col + ri(1, w - 2), row: surf + 1)) }
+            if r() < 0.5 && w >= 5 {
+                let fw = ri(2, 3), fx = col + ri(1, max(1, w - fw - 1))
+                platforms.append(PlatformDef(col: fx, row: 6, w: fw, h: 1))
+                for k in 0..<fw { gems.append(GemDef(col: fx + k, row: 7)) }
+            }
+            if enemyBudget > 0 && r() < 0.6 && w >= 5 {
+                let ex = col + ri(2, w - 3)
+                enemies.append(EnemyDef(spawnCol: ex, row: surf, minCol: col + 1, maxCol: col + w - 2))
+                enemyBudget -= 1
+            }
+            col += w
+        }
+        col += ri(2, min(4, maxGap)); w = 8
+        platforms.append(PlatformDef(col: col, row: 0, w: w, h: 3))
+        return LevelDef(widthTiles: col + w + 2, playerStart: (col: 2, row: 4),
+                        goal: (col: col + w - 3, row: surf),
+                        platforms: platforms, gems: gems, enemies: enemies)
+    }
+}
+
+/// Small seeded RNG (LCG) for reproducible procedural levels.
+struct SeededRNG {
+    private var state: UInt64
+    init(seed: UInt64) { state = seed == 0 ? 0x9E3779B97F4A7C15 : seed }
+    mutating func nextDouble() -> Double {
+        state = state &* 6364136223846793005 &+ 1442695040888963407
+        return Double(state >> 11) / Double(UInt64(1) << 53)
+    }
 }

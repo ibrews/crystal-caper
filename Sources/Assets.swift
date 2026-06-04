@@ -158,8 +158,9 @@ enum Assets {
     }
 
     /// Grass-topped dirt surface tile.
-    static func tileSurface() -> SKTexture {
-        if let real = bundled("tile_surface") { return real }
+    static func tileSurface(_ name: String = "tile_surface") -> SKTexture {
+        if let real = bundled(name) { return real }
+        if name != "tile_surface", let forest = bundled("tile_surface") { return forest }
         return cached("ph_tile_surface") {
             render(CGSize(width: 16, height: 16)) { c, _ in
                 c.setFillColor(UIColor(red: 0.45, green: 0.30, blue: 0.18, alpha: 1).cgColor)
@@ -177,8 +178,9 @@ enum Assets {
     }
 
     /// Solid dirt fill tile.
-    static func tileFill() -> SKTexture {
-        if let real = bundled("tile_fill") { return real }
+    static func tileFill(_ name: String = "tile_fill") -> SKTexture {
+        if let real = bundled(name) { return real }
+        if name != "tile_fill", let forest = bundled("tile_fill") { return forest }
         return cached("ph_tile_fill") {
             render(CGSize(width: 16, height: 16)) { c, _ in
                 c.setFillColor(UIColor(red: 0.42, green: 0.28, blue: 0.17, alpha: 1).cgColor)
@@ -192,26 +194,22 @@ enum Assets {
     }
 
     /// Wide soft sky-gradient texture for the fixed backdrop.
-    static func skyTexture() -> SKTexture {
-        cached("ph_sky") {
-            let size = CGSize(width: 4, height: 256)
-            let r = UIGraphicsImageRenderer(size: size)
-            let img = r.image { ctx in
-                let colors = [
-                    UIColor(red: 0.40, green: 0.72, blue: 0.95, alpha: 1).cgColor,
-                    UIColor(red: 0.72, green: 0.88, blue: 0.98, alpha: 1).cgColor
-                ] as CFArray
-                let space = CGColorSpaceCreateDeviceRGB()
-                let grad = CGGradient(colorsSpace: space, colors: colors, locations: [0, 1])!
-                ctx.cgContext.drawLinearGradient(grad,
-                    start: CGPoint(x: 0, y: 0),
-                    end: CGPoint(x: 0, y: size.height),
-                    options: [])
-            }
-            let t = SKTexture(image: img)
-            t.filteringMode = .linear
-            return t
+    static func skyTexture(top: UIColor, bottom: UIColor) -> SKTexture {
+        let key = "ph_sky_\(top.hashValue)_\(bottom.hashValue)"
+        if let cached = cache[key] { return cached }
+        let size = CGSize(width: 4, height: 256)
+        let r = UIGraphicsImageRenderer(size: size)
+        let img = r.image { ctx in
+            let colors = [top.cgColor, bottom.cgColor] as CFArray
+            let space = CGColorSpaceCreateDeviceRGB()
+            let grad = CGGradient(colorsSpace: space, colors: colors, locations: [0, 1])!
+            ctx.cgContext.drawLinearGradient(grad, start: .zero,
+                end: CGPoint(x: 0, y: size.height), options: [])
         }
+        let t = SKTexture(image: img)
+        t.filteringMode = .linear
+        cache[key] = t
+        return t
     }
 
     /// Rolling-hills silhouette band for parallax (tileable horizontally).

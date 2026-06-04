@@ -25,12 +25,16 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private var scoreLabel: SKLabelNode!
     private var gemLabel: SKLabelNode!
     private var livesLabel: SKLabelNode!
+    private var levelLabel: SKLabelNode!
     private var leftButton: SKShapeNode!
     private var rightButton: SKShapeNode!
     private var jumpButton: SKShapeNode!
 
     // State
     private let state = GameState()
+    var levelNumber = 1            // set before presenting; drives generation + theme
+    var carriedScore = 0
+    private var theme = Theme.forLevel(1)
     private var playerStart = CGPoint.zero
     private var killY: CGFloat = -200
     private var levelWidth: CGFloat = 0
@@ -79,7 +83,10 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     // MARK: Setup
 
     override func didMove(to view: SKView) {
-        backgroundColor = UIColor(red: 0.40, green: 0.72, blue: 0.95, alpha: 1)
+        if let lv = ProcessInfo.processInfo.environment["CC_LEVEL"], let n = Int(lv) { levelNumber = max(1, n) }
+        theme = Theme.forLevel(levelNumber)
+        state.score = carriedScore
+        backgroundColor = theme.skyTop
         anchorPoint = .zero
         scaleMode = .aspectFill
         isUserInteractionEnabled = true
@@ -93,7 +100,8 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         camera = cameraNode
 
         parallax = ParallaxBackground(screenSize: CGSize(width: GameConfig.designWidth,
-                                                         height: GameConfig.designHeight))
+                                                         height: GameConfig.designHeight),
+                                      theme: theme)
         cameraNode.addChild(parallax)
 
         buildLevel()
@@ -110,7 +118,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     private func buildLevel() {
-        let level = LevelData.level1
+        let level = LevelData.forLevel(levelNumber)
         let t = GameConfig.tile
         levelWidth = CGFloat(level.widthTiles) * t
         state.totalGems = level.gems.count
@@ -159,7 +167,8 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         for ix in 0..<p.w {
             for iy in 0..<p.h {
                 let isTop = (iy == p.h - 1)
-                let tile = SKSpriteNode(texture: isTop ? Assets.tileSurface() : Assets.tileFill())
+                let tile = SKSpriteNode(texture: isTop ? Assets.tileSurface(theme.surface)
+                                                       : Assets.tileFill(theme.fill))
                 tile.size = CGSize(width: t, height: t)
                 tile.anchorPoint = .zero
                 tile.position = CGPoint(x: CGFloat(ix) * t, y: CGFloat(iy) * t)
@@ -223,6 +232,10 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         livesLabel.fontColor = UIColor(red: 1.0, green: 0.36, blue: 0.42, alpha: 1)
         livesLabel.position = CGPoint(x: halfW - 56, y: halfH - 116)
         hud.addChild(livesLabel)
+
+        levelLabel = makeLabel("LEVEL \(levelNumber)", size: 30)
+        levelLabel.position = CGPoint(x: 0, y: halfH - 116)
+        hud.addChild(levelLabel)
     }
 
     private func makeLabel(_ text: String, size: CGFloat) -> SKLabelNode {
@@ -270,6 +283,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     private func showIntro() {
+        guard levelNumber == 1 else { showLevelFlash(); return }
         let title = makeLabel("CRYSTAL CAPER", size: 76)
         title.position = CGPoint(x: 0, y: 96)
         title.zPosition = ZLayer.overlay
@@ -291,6 +305,16 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         let vanish = SKAction.fadeOut(withDuration: 0.6)
         let done = SKAction.removeFromParent()
         for node in [title, subtitle, hint] { node.run(.sequence([appear, hold, vanish, done])) }
+    }
+
+    private func showLevelFlash() {
+        let label = makeLabel("LEVEL \(levelNumber)", size: 84)
+        label.position = .zero
+        label.zPosition = ZLayer.overlay
+        label.alpha = 0
+        cameraNode.addChild(label)
+        label.run(.sequence([.fadeIn(withDuration: 0.3), .wait(forDuration: 0.8),
+                             .fadeOut(withDuration: 0.5), .removeFromParent()]))
     }
 
     private func startMusic() {
@@ -601,6 +625,12 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
                    withKey: "blink")
     }
 
+    private var bestScore: Int {
+        get { UserDefaults.standard.integer(forKey: "cc_best_score") }
+        set { UserDefaults.standard.set(newValue, forKey: "cc_best_score") }
+    }
+    private func recordBest() { if state.score > bestScore { bestScore = state.score } }
+
     /// Fireworks + bonus when every crystal in the level is collected.
     private func celebrateAllCrystals() {
         state.score += 500
@@ -636,16 +666,19 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         }
         let bonus = state.lives * 500
         state.score += bonus
+        recordBest()
         updateHUD()
-        showOverlay(title: "YOU WIN!",
-                    subtitle: "Score \(state.score)   ·   Gems \(state.gemsCollected)/\(state.totalGems)   ·   Life bonus +\(bonus)",
-                    flavor: "Pip brings the crystals home to Agile Lens HQ.")
+        showOverlay(title: "LEVEL \(levelNumber) COMPLETE!",
+                    subtitle: "Score \(state.score)   ·   Best \(bestScore)   ·   Life bonus +\(bonus)",
+                    flavor: "Tap for level \(levelNumber + 1) — Pip presses on for Agile Lens.")
     }
 
     private func gameOver() {
         isGameOver = true
+        recordBest()
         player.physicsBody?.velocity = .zero
-        showOverlay(title: "GAME OVER", subtitle: "Score \(state.score)")
+        showOverlay(title: "GAME OVER",
+                    subtitle: "Reached level \(levelNumber)   ·   Score \(state.score)   ·   Best \(bestScore)")
     }
 
     private func showOverlay(title: String, subtitle: String, flavor: String? = nil) {
@@ -681,9 +714,16 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     private func restart() {
-        let newScene = GameScene(size: size)
-        newScene.scaleMode = scaleMode
-        view?.presentScene(newScene, transition: .fade(withDuration: 0.4))
+        let next = GameScene(size: size)
+        next.scaleMode = scaleMode
+        if didWin {                                 // advance to the next (procedural) level
+            next.levelNumber = levelNumber + 1
+            next.carriedScore = state.score
+        } else {                                    // game over → start fresh
+            next.levelNumber = 1
+            next.carriedScore = 0
+        }
+        view?.presentScene(next, transition: .fade(withDuration: 0.4))
     }
 
     // MARK: Touch input

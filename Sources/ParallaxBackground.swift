@@ -15,22 +15,20 @@ final class ParallaxBackground: SKNode {
     }
     private var bands: [Band] = []
 
-    init(screenSize: CGSize) {
+    init(screenSize: CGSize, theme: Theme) {
         self.screenSize = screenSize
         super.init()
         zPosition = ZLayer.sky
-        buildSky()
+        buildSky(top: theme.skyTop, bottom: theme.skyBottom)
         // Far hills (slow) then near hills (faster) for layered depth.
-        addBand(texture: Assets.hillsTexture(
-            color: UIColor(red: 0.62, green: 0.80, blue: 0.70, alpha: 1), height: 200),
-            factor: 0.25, baseY: -screenSize.height * 0.5 + 150)
-        addBand(texture: Assets.hillsTexture(
-            color: UIColor(red: 0.40, green: 0.66, blue: 0.46, alpha: 1), height: 260),
-            factor: 0.5, baseY: -screenSize.height * 0.5 + 110)
+        addBand(texture: Assets.hillsTexture(color: theme.hillFar, height: 200),
+                factor: 0.25, baseY: -screenSize.height * 0.5 + 150)
+        addBand(texture: Assets.hillsTexture(color: theme.hillNear, height: 260),
+                factor: 0.5, baseY: -screenSize.height * 0.5 + 110)
     }
 
-    private func buildSky() {
-        let sky = SKSpriteNode(texture: Assets.skyTexture())
+    private func buildSky(top: UIColor, bottom: UIColor) {
+        let sky = SKSpriteNode(texture: Assets.skyTexture(top: top, bottom: bottom))
         sky.size = CGSize(width: screenSize.width + 4, height: screenSize.height + 4)
         sky.position = .zero          // camera-local centre
         sky.zPosition = ZLayer.sky

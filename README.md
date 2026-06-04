@@ -2,7 +2,7 @@
 
 **▶ [Play it now in your browser](https://ibrews.github.io/crystal-caper/)** — no install, works on desktop and mobile.
 
-A complete, playable 2D pixel-art **platformer for iOS**, built with SpriteKit — and every sprite, animation, and tile is **AI-generated** via the [PixelLab](https://pixellab.ai) MCP. Run, jump, and stomp across **endless, procedurally-generated levels**: grab crystals — each one dedicated to a real Agile Lens client — squash grumpy mushrooms, trigger **fireworks** by collecting every crystal in a level, and chase a high score to a chiptune soundtrack.
+A complete, playable 2D pixel-art **platformer for iOS**, built with SpriteKit — and every sprite, animation, and tile is **AI-generated** via the [PixelLab](https://pixellab.ai) MCP. Run, jump, and stomp across **endless, procedurally-generated levels** that cycle through **forest, snow, and desert** biomes: grab crystals — each one dedicated to a real Agile Lens client — squash grumpy mushrooms, trigger **fireworks** by collecting every crystal in a level, and chase your **personal best** to a chiptune soundtrack.
 
 It's a showcase of the full **asset → game pipeline**: pixel art is generated on demand, dropped into the project, and wired into a physics-driven game with camera follow, parallax, particles, and a touch + keyboard control scheme.
 
