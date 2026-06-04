@@ -6,6 +6,13 @@ It's a showcase of the full **asset → game pipeline**: pixel art is generated 
 
 Built by **Alex Coulombe**.
 
+![Pip mid-jump over a crystal platform — title screen](docs/screenshots/title-jump.png)
+
+<p align="center">
+  <img src="docs/screenshots/start.png" width="49%" alt="The start of the level — Pip and a patrolling mushroom" />
+  <img src="docs/screenshots/win.png" width="49%" alt="The win screen with score and life bonus" />
+</p>
+
 | | |
 |---|---|
 | **Engine** | SpriteKit (SwiftUI `SpriteView` host) |
