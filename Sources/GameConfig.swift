@@ -41,6 +41,19 @@ enum GameConfig {
     /// Player center must be this far above the enemy center to count as a stomp.
     static let stompThreshold: CGFloat = 24
 
+    // MARK: Boss (caps every 5th level — "King Grumpcap")
+    static let bossMaxHP = 3
+    static let bossScore = 1500
+    static let bossSpriteSize = CGSize(width: 150, height: 150)
+    static let bossBodySize = CGSize(width: 110, height: 122)
+    static let bossBodyCenter = CGPoint(x: 0, y: -10)
+    static let bossPatrolSpeed: CGFloat = 70    // pt/s while stalking
+    static let bossChargeSpeed: CGFloat = 360   // pt/s during a lunge
+    static let bossProjectileSpeed: CGFloat = 230
+    /// Player center must clear the boss center by this much to count as a stomp.
+    static let bossStompThreshold: CGFloat = 28
+    static let bossHitInvulnerability: TimeInterval = 0.6   // boss i-frames after a stomp
+
     // MARK: Gameplay
     static let startingLives = 3
     static let gemScore = 100
@@ -60,9 +73,10 @@ enum PhysicsCategory {
     static let player: UInt32   = 0b000001
     static let ground: UInt32   = 0b000010
     static let enemy: UInt32    = 0b000100
-    static let gem: UInt32      = 0b001000
-    static let goal: UInt32     = 0b010000
-    static let killZone: UInt32 = 0b100000
+    static let gem: UInt32      = 0b0001000
+    static let goal: UInt32     = 0b0010000
+    static let killZone: UInt32 = 0b0100000
+    static let boss: UInt32     = 0b1000000   // boss body + its projectiles (told apart by node name)
 }
 
 /// Draw-order layers.

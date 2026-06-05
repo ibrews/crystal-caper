@@ -11,3 +11,7 @@ CrystalCaper.xcodeproj/
 
 # Raw asset downloads (working cache before integration)
 _assets_raw/
+
+# Cloudflare Worker local dev state (wrangler dev / Miniflare) + node deps
+.wrangler/
+node_modules/

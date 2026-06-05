@@ -1,50 +1,61 @@
 # Crystal Caper — Progress
 
-## Status: ✅ COMPLETE & VERIFIED — playable game, win confirmed on device
+## Base game: ✅ COMPLETE & VERIFIED (prior session)
+SpriteKit pixel-art platformer + HTML5/Canvas web port, 100% generated assets.
+Builds clean, 60fps on iPhone 17 (iOS 26.5), autopilot beats levels. Procedural
+levels, 3 biomes, client-name crystal pops, all-crystal fireworks, looping music,
+personal-best leaderboard.
 
-A SpriteKit pixel-art platformer with 100% generated assets (PixelLab art +
-synthesized audio). Builds clean, runs at 60fps on iPhone 17 (iOS 26.5),
-autopilot beats the level end-to-end.
+---
 
-## Done
-- Full game (17 Swift files): manual-gravity platformer controller, contacts,
-  camera follow + clamp, parallax, particles, screen shake, jump assists
-  (coyote time + jump buffer), win/game-over/respawn, tap-to-restart.
-- Controls: on-screen ◀ ▶ JUMP + hardware keyboard (A/D/←/→, Space/W/↑).
-- Generated assets integrated:
-  - Hero "Pip" (fox) — idle/run/jump animations (east, mirrored for west).
-  - Enemy "Grumpcap" (mushroom) — walk animation.
-  - Forest tileset — sliced + composited grass-capped dirt from the Wang sheet.
-  - 5 chiptune SFX (jump/gem/stomp/hurt/win), synthesized in pure Python.
-- Procedural placeholder textures so the game runs at any asset stage.
-- Attract/self-test bot (`CC_AUTOPLAY=1`) — runs the level autonomously; used
-  for headless gameplay verification (caught the platform-clearance bug below).
-- README + Tools/ pipeline docs + reproducible asset scripts.
+## CURRENT TASK (2026-06-04): three new features, iOS + web parity
 
-## Verified on device (iPhone 17 / iOS 26.5)
-- Run, jump pits, stomp enemies, collect gems, reach goal → WIN screen.
-- Win run: Score 2500, 5/14 gems, +1500 life bonus, 60fps, 234 nodes / 78 draws.
+### Decisions
+- **Leaderboard backend:** Cloudflare Worker + KV (Alex chose).
+- **Deploy:** "Build first, decide deploy later" → clients are URL-flag-gated and degrade
+  gracefully; Worker + Node test harness ship now; production `wrangler deploy` is Alex's step
+  (REVIEW_NEEDED.md). Round-trip verified in-process via the Node harness (+ `wrangler dev --local` if available).
+- **Boss art:** procedural `bossPlaceholder()` to conserve PixelLab trial budget (~9/40 used);
+  loader auto-adopts real `boss_*.png` if dropped in later.
 
-## Tunables (GameConfig.swift)
-gravityAccel 2600 · moveSpeed 360 · jumpVelocity 1080 · stompBounce 760
-coyote 0.10 · buffer 0.12 · playerBody 52×104 @ (0,-22) · enemyBody 78×70 @ (0,-30)
-Set `showDebugOverlays = true` for FPS/draw/physics overlays.
+### Features
+1. Moving platforms — carry the player; deterministic sinusoid; bonus floating ledges only
+   (preserves gap≤5 / clearance≥3 invariants). Appear at level ≥ 4.
+2. Boss — every 5th level; 3 stomps; telegraph (pause+flash) → charge + slow projectile;
+   side contact costs a heart; on defeat: big bonus + all-crystals fireworks, then reveal goal.
+3. Global leaderboard — shared Cloudflare Worker (name/score/level/ts, top 20), light validation +
+   per-IP rate-limit; web + iOS clients; personal best retained.
 
-## Failed approaches / gotchas (keep — saves a future session)
-- PixelLab tileset image URL returned a 0-byte file with plain curl — it 302
-  redirects to a CDN; needs `curl -L`. (Character frame URLs are direct, no -L.)
-- `create_*_object` PixelLab tools cost 20-40 generations each — unusable on a
-  20-generation trial. Made the collectible/flag procedural instead; all
-  characters cost 1 gen each.
-- LEVEL BUG (found by autopilot): floating platforms only 2 tiles above the
-  ground formed a low ceiling — the ~3-tile-tall fox body collided and the bot
-  ran in place. Fix: floating platforms need ≥3-tile clearance (row 6+). A human
-  would have hit the same wall. Lesson: in-lane ceilings must clear player body.
-- iPhone sim boots portrait; landscape-locked app renders rotated → post-rotate
-  screenshots with `sips -r 270`.
+### Status
+- [x] Moving platforms (iOS) / (web) — carry logic; deterministic sinusoid; L4+
+- [x] Boss (iOS) / (web) — telegraph→charge/projectile, 3 stomps, defeat→fireworks→goal reveal
+- [x] Leaderboard Worker + harness / web client / iOS client — URL-flag-gated, graceful
+- [x] README + Things to Try + Tools/README + REVIEW_NEEDED
+- [x] iOS build SUCCEEDED; on-device shots: moving platform (L6), boss (L5), L1 regression WIN
+- [x] Web vm-harness PASS (genLevel invariants + 1800+ loop frames); Worker round-trip PASS
+      (in-process + live `wrangler dev` HTTP: submit→read, validation, CORS, rate-limit)
+- [~] Browser smoke (preview agent) — running
+- [ ] KB + timing log
+- [ ] Commit + push + Pages 200
+- [ ] Leaderboard PRODUCTION deploy = Alex's step (REVIEW_NEEDED.md); code verified, URL empty until then
 
-## Possible next steps (not required)
-- Nudge player start / inset HUD off the Dynamic Island at far-left.
-- More levels (LevelData is data-driven — add level2, scene transition).
-- App icon from Pip's south rotation.
-- Music loop.
+### Env facts (verified this session)
+- Swift 5.0 mode (project.yml), deployment iOS 17.0. Target sim UDID
+  `974E8854-BFD9-4A36-A653-ED2142709C79` (iPhone 17, iOS 26.5) is Booted.
+- `wrangler`/`supabase` CLIs NOT installed; no CF/Supabase creds in env. Node v26 present.
+
+---
+
+## Failed approaches / gotchas (KEEP — saves a future session)
+- PixelLab tileset image URL returns a 0-byte file with plain curl — it 302 redirects to a CDN;
+  needs `curl -L`. (Character frame URLs are direct, no -L.)
+- `create_*_object` PixelLab tools cost 20-40 generations each — unusable on the trial. Make
+  collectibles/flag/boss procedural instead; `create_character` costs ~1 gen each.
+- PixelLab trial budget is small (~9/40 used as of this task) — do NOT spend generations casually.
+- LEVEL BUG (found by autopilot): floating platforms only 2 tiles above ground formed a low
+  ceiling — the ~3-tile fox body collided and the bot ran in place. Floating platforms need
+  ≥3-tile clearance (row 6+). Keep this invariant when adding moving platforms.
+- iPhone sim boots portrait; landscape-locked app renders rotated → post-rotate screenshots with
+  `sips -r 270`.
+- iOS LCG RNG and web mulberry32 RNG differ → same level number is NOT byte-identical across
+  platforms (parallel, not mirrored). Verify each platform's level independently.

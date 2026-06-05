@@ -21,6 +21,26 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private var player: Player!
     private var enemies: [Enemy] = []
 
+    /// A platform that translates on a deterministic sinusoid and carries a
+    /// grounded player by its per-frame delta. `node` is the static tile container.
+    private struct MovingPlatform {
+        let node: SKNode
+        let base: CGPoint
+        let axis: MoveAxis
+        let amplitude: CGFloat   // points
+        let speed: CGFloat       // rad/s
+        let phase: CGFloat
+        var lastDelta: CGVector
+    }
+    private var movingPlatforms: [MovingPlatform] = []
+
+    // Boss (milestone levels)
+    private var boss: Boss?
+    private var bossProjectiles: [(node: SKSpriteNode, vel: CGVector, born: TimeInterval)] = []
+    private var bossHPPips: [SKSpriteNode] = []
+    private var isBossLevel = false
+    private var bossGoalPosition: CGPoint?   // goal flag is gated until the boss falls
+
     // HUD
     private var scoreLabel: SKLabelNode!
     private var gemLabel: SKLabelNode!
@@ -43,10 +63,12 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private var isGameOver = false
     private var didWin = false
     private var overlayNode: SKNode?
+    private var topScores: [Leaderboard.Entry] = []   // shared online board (empty/disabled until deployed)
 
     // Timing
     private var lastUpdateTime: TimeInterval = 0
     private var now: TimeInterval = 0
+    private var levelTime: TimeInterval = 0   // accumulates from 0 at level start (moving-platform clock)
 
     // Input
     private var leftKey = false, rightKey = false
@@ -68,6 +90,8 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private var pendingPitDeath = false
     private var pendingWin = false
     private var pendingBounce = false
+    private var pendingBossStomp = false
+    private var pendingProjectileHits: [SKNode] = []
     private var collectedGemIDs = Set<ObjectIdentifier>()
     private var clientIdx = 0
     private var allGemsCelebrated = false
@@ -111,6 +135,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         setupControls()
         showIntro()
         startMusic()
+        Leaderboard.fetchTop { [weak self] in self?.topScores = $0 }
 
         if let skView = self.view {
             skView.ignoresSiblingOrder = true
@@ -137,10 +162,16 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             enemies.append(enemy)
         }
 
-        // Goal flag.
+        // Goal flag — gated behind the boss on every 5th level.
         let goalPos = CGPoint(x: (CGFloat(level.goal.col) + 0.5) * t,
                               y: CGFloat(level.goal.row) * t)
-        world.addChild(Collectibles.goalFlag(at: goalPos))
+        isBossLevel = (levelNumber % 5 == 0)
+        if isBossLevel {
+            spawnBoss(level: level, goalPos: goalPos)
+            bossGoalPosition = goalPos
+        } else {
+            world.addChild(Collectibles.goalFlag(at: goalPos))
+        }
 
         // Kill plane: a wide sensor well below the level.
         killY = -2 * t
@@ -156,6 +187,39 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
         playerStart = CGPoint(x: (CGFloat(level.playerStart.col) + 0.5) * t,
                               y: CGFloat(level.playerStart.row) * t)
+        // Dev/test knob: start the player at a given tile column (e.g. just left of
+        // the boss for headless boss verification). Negative = columns from the right
+        // end. No effect unless CC_START_COL is set.
+        if let s = ProcessInfo.processInfo.environment["CC_START_COL"], let c = Int(s) {
+            let x = c >= 0 ? CGFloat(c) * t : levelWidth + CGFloat(c) * t
+            playerStart.x = min(max(x, t), levelWidth - 3 * t)
+        }
+    }
+
+    /// Spawn the boss on the ground platform under the goal and float its HP pips.
+    private func spawnBoss(level: LevelDef, goalPos: CGPoint) {
+        let t = GameConfig.tile
+        let half = GameConfig.bossBodySize.width / 2
+        var minX = goalPos.x - 5 * t, maxX = goalPos.x + t
+        for p in level.platforms where p.h >= 3 && p.col <= level.goal.col && level.goal.col < p.col + p.w {
+            minX = CGFloat(p.col) * t + half
+            maxX = CGFloat(p.col + p.w) * t - half
+        }
+        let restingY = CGFloat(level.goal.row) * t
+            + GameConfig.bossBodySize.height / 2 - GameConfig.bossBodyCenter.y
+        let b = Boss.make(arenaMinX: minX, arenaMaxX: maxX)
+        b.position = CGPoint(x: min(maxX, goalPos.x - 1.5 * t), y: restingY)
+        world.addChild(b)
+        boss = b
+        for _ in 0..<GameConfig.bossMaxHP {
+            let pip = SKSpriteNode(texture: Assets.sparkPlaceholder())
+            pip.color = UIColor(red: 1.0, green: 0.36, blue: 0.42, alpha: 1)
+            pip.colorBlendFactor = 1
+            pip.size = CGSize(width: 16, height: 16)
+            pip.zPosition = ZLayer.enemy + 1
+            world.addChild(pip)
+            bossHPPips.append(pip)
+        }
     }
 
     private func addPlatform(_ p: PlatformDef) {
@@ -186,6 +250,12 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         body.collisionBitMask = PhysicsCategory.player | PhysicsCategory.enemy
         body.contactTestBitMask = PhysicsCategory.none
         container.physicsBody = body
+        if let m = p.moving {
+            movingPlatforms.append(MovingPlatform(
+                node: container, base: container.position,
+                axis: m.axis, amplitude: CGFloat(m.range) * t,
+                speed: CGFloat(m.speed), phase: CGFloat(m.phase), lastDelta: .zero))
+        }
         world.addChild(container)
     }
 
@@ -336,8 +406,11 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         if !isGameOver && !didWin {
             resolvePending()
             if !isGameOver && !didWin {
+                levelTime += TimeInterval(clampedDt)
+                updateMovingPlatforms(clampedDt)
                 updatePlayer(clampedDt)
                 updateEnemies(clampedDt)
+                updateBoss(clampedDt)
                 if player.position.y < killY { pendingPitDeath = true }
             }
         }
@@ -347,9 +420,18 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private func updatePlayer(_ dt: CGFloat) {
         guard let body = player.physicsBody else { return }
 
-        let grounded = isOnGround(center: bodyCenter(of: player, GameConfig.playerBodyCenter),
-                                  half: GameConfig.playerBodySize)
+        let groundedNode = groundNode(center: bodyCenter(of: player, GameConfig.playerBodyCenter),
+                                      half: GameConfig.playerBodySize)
+        let grounded = groundedNode != nil
         if grounded { lastGroundedTime = now }
+
+        // Carry: when resting on a moving platform, inherit its per-frame delta so
+        // the player rides it (platforms already moved this frame in updateMovingPlatforms).
+        if let gn = groundedNode,
+           let mp = movingPlatforms.first(where: { $0.node === gn }) {
+            player.position.x += mp.lastDelta.dx
+            player.position.y += mp.lastDelta.dy
+        }
 
         // Horizontal input — human controls, or the autopilot/attract bot.
         var goLeft = leftKey || touchControls.values.contains(.left)
@@ -430,6 +512,92 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         }
     }
 
+    /// Translate each moving platform to a deterministic sinusoidal position and
+    /// record its per-frame delta (consumed by updatePlayer's carry). Run before
+    /// updatePlayer so the player rides the platform's motion this same frame.
+    private func updateMovingPlatforms(_ dt: CGFloat) {
+        guard !movingPlatforms.isEmpty else { return }
+        let t = CGFloat(levelTime)
+        for i in movingPlatforms.indices {
+            let mp = movingPlatforms[i]
+            let off = sin(t * mp.speed + mp.phase) * mp.amplitude
+            let target = mp.axis == .horizontal
+                ? CGPoint(x: mp.base.x + off, y: mp.base.y)
+                : CGPoint(x: mp.base.x, y: mp.base.y + off)
+            movingPlatforms[i].lastDelta = CGVector(dx: target.x - mp.node.position.x,
+                                                    dy: target.y - mp.node.position.y)
+            mp.node.position = target
+        }
+    }
+
+    // MARK: Boss
+
+    private func updateBoss(_ dt: CGFloat) {
+        updateBossProjectiles(dt)
+        guard let boss = boss, !boss.isDead, let body = boss.physicsBody else { return }
+
+        // Manual gravity (same integration as the player/enemies).
+        let grounded = isOnGround(center: bodyCenter(of: boss, GameConfig.bossBodyCenter),
+                                  half: GameConfig.bossBodySize)
+        if grounded && body.velocity.dy <= 0 {
+            body.velocity.dy = 0
+        } else {
+            body.velocity.dy = max(body.velocity.dy - GameConfig.gravityAccel * dt, -GameConfig.maxFallSpeed)
+        }
+
+        let action = boss.advance(dt: TimeInterval(dt), playerX: player.position.x, now: now)
+        body.velocity.dx = boss.desiredVX
+        boss.clampToArena()
+        if case .fireProjectile = action { fireBossProjectile(from: boss) }
+
+        for (i, pip) in bossHPPips.enumerated() {
+            pip.position = CGPoint(x: boss.position.x - 18 + CGFloat(i) * 18,
+                                   y: boss.position.y + GameConfig.bossSpriteSize.height / 2 + 4)
+            pip.isHidden = i >= boss.hp
+        }
+    }
+
+    private func fireBossProjectile(from boss: Boss) {
+        let proj = SKSpriteNode(texture: Assets.bossProjectilePlaceholder())
+        proj.name = "bossProjectile"
+        proj.size = CGSize(width: 28, height: 28)
+        proj.zPosition = ZLayer.enemy + 1
+        proj.position = CGPoint(x: boss.position.x + boss.facing * 42, y: boss.position.y + 6)
+        let body = SKPhysicsBody(circleOfRadius: 12)
+        body.isDynamic = false
+        body.categoryBitMask = PhysicsCategory.boss
+        body.collisionBitMask = PhysicsCategory.none
+        body.contactTestBitMask = PhysicsCategory.player
+        proj.physicsBody = body
+        proj.run(.repeatForever(.rotate(byAngle: .pi, duration: 0.5)))
+        world.addChild(proj)
+        let toPlayer: CGFloat = player.position.x >= boss.position.x ? 1 : -1
+        bossProjectiles.append((node: proj,
+                                vel: CGVector(dx: toPlayer * GameConfig.bossProjectileSpeed, dy: 230),
+                                born: now))
+    }
+
+    /// Slow lobbed arc with a gentle gravity so it telegraphs and is dodgeable.
+    private func updateBossProjectiles(_ dt: CGFloat) {
+        guard !bossProjectiles.isEmpty else { return }
+        for i in bossProjectiles.indices.reversed() {
+            var p = bossProjectiles[i]
+            p.vel.dy = max(p.vel.dy - GameConfig.gravityAccel * 0.45 * dt, -GameConfig.maxFallSpeed)
+            p.node.position.x += p.vel.dx * dt
+            p.node.position.y += p.vel.dy * dt
+            bossProjectiles[i] = p
+            if p.node.position.y < killY || now - p.born > 4.0 {
+                p.node.removeFromParent()
+                bossProjectiles.remove(at: i)
+            }
+        }
+    }
+
+    private func removeBossProjectile(_ node: SKNode) {
+        node.removeFromParent()
+        bossProjectiles.removeAll { $0.node === node }
+    }
+
     private func updateCamera() {
         guard player != nil else { return }
         let targetX = min(max(player.position.x, camMinX), camMaxX)
@@ -459,24 +627,29 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
                 - GameConfig.playerBodySize.height / 2 + 6)
     }
 
-    /// Two short downward rays at the body's left/right edges detect ground even
-    /// when standing near a ledge. Only `ground` category counts.
-    private func isOnGround(center: CGPoint, half: CGSize) -> Bool {
+    /// Two short downward rays at the body's left/right edges find the ground node
+    /// under the body (even near a ledge). Returns the resting node so the caller
+    /// can tell whether it's a moving platform. Only `ground` category counts.
+    private func groundNode(center: CGPoint, half: CGSize) -> SKNode? {
         let halfH = half.height / 2
         let halfW = half.width / 2
         for dx in [-halfW * 0.6, halfW * 0.6] {
             let start = CGPoint(x: center.x + dx, y: center.y - halfH + 4)
             let end = CGPoint(x: center.x + dx, y: center.y - halfH - 8)
-            var hit = false
+            var found: SKNode?
             physicsWorld.enumerateBodies(alongRayStart: start, end: end) { b, _, _, stop in
                 if b.categoryBitMask & PhysicsCategory.ground != 0 {
-                    hit = true
+                    found = b.node
                     stop.pointee = true
                 }
             }
-            if hit { return true }
+            if let found { return found }
         }
-        return false
+        return nil
+    }
+
+    private func isOnGround(center: CGPoint, half: CGSize) -> Bool {
+        groundNode(center: center, half: half) != nil
     }
 
     /// Attract-bot decision: jump when a pit opens ahead or an enemy is in range
@@ -501,6 +674,10 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
                 return true
             }
         }
+        if let boss = boss, !boss.isDead {
+            let dx = boss.position.x - player.position.x
+            if dx > t * 0.2 && dx < t * 2.6 { return true }   // hop to stomp the boss
+        }
         return false
     }
 
@@ -519,6 +696,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         case PhysicsCategory.goal:     pendingWin = true
         case PhysicsCategory.killZone: pendingPitDeath = true
         case PhysicsCategory.enemy:    handleEnemyContact(other.node)
+        case PhysicsCategory.boss:     handleBossContact(other.node)
         default: break
         }
     }
@@ -542,6 +720,27 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             enemy.isDead = true
             pendingStompedEnemies.append(enemy)
             pendingBounce = true
+        } else {
+            pendingHurt = true
+        }
+    }
+
+    private func handleBossContact(_ node: SKNode?) {
+        guard let node else { return }
+        // A projectile always hurts (no stomping it) and is consumed.
+        if node.name == "bossProjectile" {
+            if now >= invulnerableUntil { pendingHurt = true }
+            pendingProjectileHits.append(node)
+            return
+        }
+        guard let boss = boss, !boss.isDead, let body = player.physicsBody else { return }
+        if now < invulnerableUntil { return }
+        let falling = body.velocity.dy < 0
+        let above = (player.position.y + GameConfig.playerBodyCenter.y)
+            > (boss.position.y + GameConfig.bossBodyCenter.y + GameConfig.bossStompThreshold)
+        if falling && above {
+            pendingBounce = true                     // always bounce off the head
+            if now >= boss.invulnerableUntil { pendingBossStomp = true }   // count only outside its i-frames
         } else {
             pendingHurt = true
         }
@@ -580,6 +779,25 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         }
         if !pendingStompedEnemies.isEmpty { enemies.removeAll { $0.isDead && $0.parent == nil } }
         pendingStompedEnemies.removeAll()
+
+        for proj in pendingProjectileHits { removeBossProjectile(proj) }
+        pendingProjectileHits.removeAll()
+
+        if pendingBossStomp {
+            pendingBossStomp = false
+            if let boss = boss, !boss.isDead {
+                let defeated = boss.takeHit(now: now)
+                Effects.burst(at: boss.position, in: world, color: .white, count: 12, speed: 200)
+                shakeAmount = max(shakeAmount, 10)
+                Audio.play("sfx_stomp.wav", on: self)
+                if defeated {
+                    defeatBoss()
+                } else {
+                    Effects.popText("HIT!", at: CGPoint(x: boss.position.x, y: boss.position.y + 80),
+                                    in: world, color: .white)
+                }
+            }
+        }
 
         if pendingHurt { pendingHurt = false; applyHurt() }
         if pendingPitDeath { pendingPitDeath = false; pitDeath() }
@@ -639,16 +857,50 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         Effects.popText("ALL CRYSTALS!  +500",
                         at: CGPoint(x: player.position.x, y: player.position.y + 90),
                         in: world, color: .systemYellow)
+        fireworksBurst(around: player.position)
+    }
+
+    /// Staggered multi-colour fireworks around a point — shared by the all-crystals
+    /// celebration and the boss-defeat celebration.
+    private func fireworksBurst(around center: CGPoint) {
         let colors: [UIColor] = [.systemPink, .systemYellow, .systemTeal, .systemGreen, .systemOrange]
         for i in 0..<6 {
             run(.sequence([.wait(forDuration: Double(i) * 0.18), .run { [weak self] in
                 guard let self else { return }
-                let pos = CGPoint(x: self.player.position.x + CGFloat.random(in: -320...320),
-                                  y: self.player.position.y + CGFloat.random(in: 40...260))
+                let pos = CGPoint(x: center.x + CGFloat.random(in: -320...320),
+                                  y: center.y + CGFloat.random(in: 40...260))
                 Effects.burst(at: pos, in: self.world,
                               color: colors.randomElement() ?? .systemYellow,
                               count: 16, speed: 240, scale: 2.6)
             }]))
+        }
+    }
+
+    /// Boss defeated: big bonus, the all-crystals-style fireworks, then reveal the
+    /// gated goal flag so the player can finish the milestone level.
+    private func defeatBoss() {
+        guard let boss = boss else { return }
+        let at = boss.position
+        state.score += GameConfig.bossScore
+        shakeAmount = max(shakeAmount, 16)
+        Audio.play("sfx_win.wav", on: self)
+        Effects.popText("KING GRUMPCAP DOWN!  +\(GameConfig.bossScore)",
+                        at: CGPoint(x: at.x, y: at.y + 70), in: world, color: .systemYellow)
+        fireworksBurst(around: at)
+        boss.die { }
+        self.boss = nil
+        bossHPPips.forEach { $0.removeFromParent() }
+        bossHPPips.removeAll()
+        for p in bossProjectiles { p.node.removeFromParent() }
+        bossProjectiles.removeAll()
+        if let gp = bossGoalPosition {
+            let flag = Collectibles.goalFlag(at: gp)
+            flag.setScale(0.1)
+            flag.run(.scale(to: 1, duration: 0.3))
+            world.addChild(flag)
+            Effects.popText("THE GOAL IS OPEN!", at: CGPoint(x: gp.x, y: gp.y + 170),
+                            in: world, color: .systemTeal)
+            bossGoalPosition = nil
         }
     }
 
@@ -671,6 +923,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         showOverlay(title: "LEVEL \(levelNumber) COMPLETE!",
                     subtitle: "Score \(state.score)   ·   Best \(bestScore)   ·   Life bonus +\(bonus)",
                     flavor: "Tap for level \(levelNumber + 1) — Pip presses on for Agile Lens.")
+        if let node = overlayNode { showLeaderboard(on: node) }
     }
 
     private func gameOver() {
@@ -679,6 +932,8 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         player.physicsBody?.velocity = .zero
         showOverlay(title: "GAME OVER",
                     subtitle: "Reached level \(levelNumber)   ·   Score \(state.score)   ·   Best \(bestScore)")
+        if let node = overlayNode { showLeaderboard(on: node) }
+        submitScoreIfEnabled()
     }
 
     private func showOverlay(title: String, subtitle: String, flavor: String? = nil) {
@@ -711,6 +966,56 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         node.setScale(0.7)
         node.alpha = 0
         node.run(.group([.fadeIn(withDuration: 0.3), .scale(to: 1, duration: 0.3)]))
+    }
+
+    // MARK: Online leaderboard
+
+    /// Draw (or redraw) the global top-5 onto an overlay node. No-op when the
+    /// board is disabled or empty, so pre-deploy the overlays look unchanged.
+    private func showLeaderboard(on node: SKNode) {
+        node.childNode(withName: "lbBox")?.removeFromParent()
+        guard Leaderboard.isEnabled, !topScores.isEmpty else { return }
+        let box = SKNode()
+        box.name = "lbBox"
+        let header = makeLabel("— GLOBAL TOP —", size: 24)
+        header.fontColor = .systemYellow
+        header.position = CGPoint(x: 0, y: -138)
+        box.addChild(header)
+        for (i, e) in topScores.prefix(5).enumerated() {
+            let line = makeLabel("\(i + 1). \(e.name)   \(e.score)   ·  Lv \(e.level)", size: 22)
+            line.fontColor = UIColor(red: 0.87, green: 0.92, blue: 1, alpha: 1)
+            line.position = CGPoint(x: 0, y: -168 - CGFloat(i) * 28)
+            box.addChild(line)
+        }
+        node.addChild(box)
+    }
+
+    /// Submit the final score (game over) once initials are known, then refresh.
+    private func submitScoreIfEnabled() {
+        guard Leaderboard.isEnabled else { return }
+        ensureInitials { [weak self] name in
+            guard let self else { return }
+            Leaderboard.submit(name: name, score: self.state.score, level: self.levelNumber) { [weak self] top in
+                guard let self else { return }
+                if !top.isEmpty { self.topScores = top }
+                if let node = self.overlayNode { self.showLeaderboard(on: node) }
+            }
+        }
+    }
+
+    /// Use stored initials, or prompt once via a UIAlertController.
+    private func ensureInitials(_ completion: @escaping (String) -> Void) {
+        if !Leaderboard.initials.isEmpty { completion(Leaderboard.initials); return }
+        guard let vc = view?.window?.rootViewController else { completion("???"); return }
+        let alert = UIAlertController(title: "Leaderboard",
+                                      message: "Enter your initials (3 letters):", preferredStyle: .alert)
+        alert.addTextField { $0.autocapitalizationType = .allCharacters }
+        alert.addAction(UIAlertAction(title: "Post", style: .default) { _ in
+            let name = Leaderboard.sanitize(alert.textFields?.first?.text ?? "")
+            Leaderboard.initials = name
+            completion(name)
+        })
+        vc.present(alert, animated: true)
     }
 
     private func restart() {

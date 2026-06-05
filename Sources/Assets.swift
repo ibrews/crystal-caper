@@ -122,6 +122,87 @@ enum Assets {
         }
     }
 
+    /// Boss placeholder — "King Grumpcap": a big armored mushroom with a gold
+    /// crown and a furious glare. Drawn on a 96×96 canvas (vs the enemy's 56×56)
+    /// so it reads as a clear, larger threat. Same hand-drawn style as the others;
+    /// the loader adopts real `boss_*.png` art automatically if it's ever dropped in.
+    static func bossPlaceholder() -> SKTexture {
+        cached("ph_boss") {
+            render(CGSize(width: 96, height: 96)) { c, _ in
+                let crimson = UIColor(red: 0.58, green: 0.12, blue: 0.20, alpha: 1).cgColor
+                let crimsonDark = UIColor(red: 0.44, green: 0.08, blue: 0.15, alpha: 1).cgColor
+                let stem = UIColor(red: 0.93, green: 0.88, blue: 0.74, alpha: 1).cgColor
+                let armor = UIColor(red: 0.34, green: 0.36, blue: 0.42, alpha: 1).cgColor
+                let armorDark = UIColor(red: 0.24, green: 0.26, blue: 0.31, alpha: 1).cgColor
+                let gold = UIColor(red: 0.96, green: 0.80, blue: 0.22, alpha: 1).cgColor
+
+                // Feet.
+                c.setFillColor(stem)
+                c.fill(CGRect(x: 30, y: 80, width: 14, height: 12))
+                c.fill(CGRect(x: 52, y: 80, width: 14, height: 12))
+                // Armored shoulders / arms.
+                c.setFillColor(armor)
+                c.fillEllipse(in: CGRect(x: 10, y: 52, width: 20, height: 22))
+                c.fillEllipse(in: CGRect(x: 66, y: 52, width: 20, height: 22))
+                c.setFillColor(armorDark)
+                c.fill(CGRect(x: 14, y: 60, width: 12, height: 4))
+                c.fill(CGRect(x: 70, y: 60, width: 12, height: 4))
+                // Stem / torso.
+                c.setFillColor(stem)
+                c.fill(CGRect(x: 30, y: 50, width: 36, height: 34))
+                // Chest plate.
+                c.setFillColor(armor)
+                c.fill(CGRect(x: 34, y: 58, width: 28, height: 18))
+                c.setFillColor(armorDark)
+                c.fill(CGRect(x: 44, y: 58, width: 8, height: 18))
+                // Cap — big crimson dome, wider than the body.
+                c.setFillColor(crimson)
+                c.fillEllipse(in: CGRect(x: 8, y: 22, width: 80, height: 44))
+                c.fill(CGRect(x: 8, y: 44, width: 80, height: 10))
+                c.setFillColor(crimsonDark)
+                c.fill(CGRect(x: 8, y: 50, width: 80, height: 4))
+                // Cap spots.
+                c.setFillColor(UIColor(red: 0.97, green: 0.90, blue: 0.78, alpha: 1).cgColor)
+                c.fillEllipse(in: CGRect(x: 22, y: 30, width: 12, height: 12))
+                c.fillEllipse(in: CGRect(x: 60, y: 32, width: 10, height: 10))
+                c.fillEllipse(in: CGRect(x: 44, y: 26, width: 8, height: 8))
+                // Furious eyes + angry brows.
+                c.setFillColor(UIColor.white.cgColor)
+                c.fillEllipse(in: CGRect(x: 34, y: 56, width: 11, height: 10))
+                c.fillEllipse(in: CGRect(x: 51, y: 56, width: 11, height: 10))
+                c.setFillColor(UIColor.black.cgColor)
+                c.fillEllipse(in: CGRect(x: 38, y: 59, width: 5, height: 6))
+                c.fillEllipse(in: CGRect(x: 53, y: 59, width: 5, height: 6))
+                c.setFillColor(crimsonDark)
+                c.move(to: CGPoint(x: 33, y: 54)); c.addLine(to: CGPoint(x: 46, y: 58))
+                c.addLine(to: CGPoint(x: 46, y: 55)); c.addLine(to: CGPoint(x: 33, y: 51)); c.closePath(); c.fillPath()
+                c.move(to: CGPoint(x: 63, y: 54)); c.addLine(to: CGPoint(x: 50, y: 58))
+                c.addLine(to: CGPoint(x: 50, y: 55)); c.addLine(to: CGPoint(x: 63, y: 51)); c.closePath(); c.fillPath()
+                // Crown.
+                c.setFillColor(gold)
+                c.fill(CGRect(x: 36, y: 12, width: 24, height: 8))
+                for x in [36, 44, 52] { c.fill(CGRect(x: x, y: 4, width: 8, height: 10)) }
+                c.setFillColor(UIColor(red: 0.40, green: 0.85, blue: 0.95, alpha: 1).cgColor)
+                c.fillEllipse(in: CGRect(x: 45, y: 13, width: 6, height: 6))   // crown jewel
+            }
+        }
+    }
+
+    /// Boss spore projectile — a small spiky purple orb.
+    static func bossProjectilePlaceholder() -> SKTexture {
+        cached("ph_boss_proj") {
+            render(CGSize(width: 20, height: 20)) { c, _ in
+                c.setFillColor(UIColor(red: 0.62, green: 0.30, blue: 0.78, alpha: 1).cgColor)
+                for a in stride(from: 0.0, to: .pi * 2, by: .pi / 4) {
+                    c.fill(CGRect(x: 10 + cos(a) * 8 - 1.5, y: 10 + sin(a) * 8 - 1.5, width: 3, height: 3))
+                }
+                c.fillEllipse(in: CGRect(x: 4, y: 4, width: 12, height: 12))
+                c.setFillColor(UIColor(red: 0.85, green: 0.66, blue: 0.98, alpha: 1).cgColor)
+                c.fillEllipse(in: CGRect(x: 7, y: 7, width: 4, height: 4))
+            }
+        }
+    }
+
     /// Cyan crystal gem (also used for HUD icon and sparkle particles).
     static func gemPlaceholder() -> SKTexture {
         cached("ph_gem") {

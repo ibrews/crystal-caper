@@ -1,0 +1,6 @@
+{
+  "name": "crystal-caper-leaderboard",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Worker + KV high-score backend for Crystal Caper."
+}

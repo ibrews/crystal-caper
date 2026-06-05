@@ -1,0 +1,11 @@
+name = "crystal-caper-leaderboard"
+main = "worker.js"
+compatibility_date = "2024-09-01"
+
+# KV namespace holding the board + per-IP rate-limit keys.
+# Create it once with:  npx wrangler kv namespace create LEADERBOARD
+# then paste the printed id below (and the preview_id for `wrangler dev`).
+[[kv_namespaces]]
+binding = "LEADERBOARD"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+# preview_id = "REPLACE_WITH_PREVIEW_KV_NAMESPACE_ID"

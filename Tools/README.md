@@ -46,6 +46,27 @@ python3 Tools/gen_sfx.py          # -> Resources/sfx_*.wav
 
 ## Procedural fallbacks
 
-`Assets.swift` draws hand-coded placeholder textures (hero, enemy, gem, flag,
-tiles, sky, hills) whenever a real PNG is missing, so the game is always
-buildable and playable even before assets are integrated.
+`Assets.swift` draws hand-coded placeholder textures (hero, enemy, **boss**, gem,
+flag, tiles, sky, hills) whenever a real PNG is missing, so the game is always
+buildable and playable even before assets are integrated. The boss, "King
+Grumpcap" (`bossPlaceholder()`), is intentionally placeholder-only for now to
+conserve the PixelLab trial budget; drop `boss_walk_0.png`… into `Resources/` and
+the loader picks them up with no code change.
+
+## Web port validation — `web_harness.mjs`
+
+The web build (`docs/index.html`) has no compile step, so `Tools/web_harness.mjs`
+is its "compiler": a headless Node `vm` harness that stubs the browser
+(`document`/`canvas`/`Image`/`Audio`/`requestAnimationFrame`/events), evaluates the
+real page script, asserts the level-generator invariants (ground gaps ≤ 5 tiles,
+floating ledges ≥ 3-tile clearance, ≥1 moving platform from level 4), and drives
+the actual game loop for hundreds of frames at several levels (incl. boss levels)
+to catch runtime errors before they reach a browser.
+
+```bash
+node Tools/web_harness.mjs            # full suite
+node Tools/web_harness.mjs 5 600      # drive only level 5 for 600 frames
+```
+
+The leaderboard backend has its own in-process round-trip test:
+`node leaderboard/test-worker.mjs`.

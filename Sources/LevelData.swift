@@ -3,7 +3,22 @@ import CoreGraphics
 /// Hand-authored level, expressed in tile coordinates with the origin at the
 /// bottom-left. `row` is the bottom row of a block; a platform of height `h`
 /// has its walkable surface at tile row `row + h`.
-struct PlatformDef { let col: Int; let row: Int; let w: Int; let h: Int }
+enum MoveAxis { case horizontal, vertical }
+
+/// Optional moving-platform descriptor. `range` is the sinusoidal amplitude in
+/// **tiles** from the platform's base; `speed` is angular speed (rad/s); `phase`
+/// offsets the wave (rad) so neighbours don't move in lockstep. Integrated
+/// deterministically from a per-level clock in `update(_:)` (no SKAction) so the
+/// autopilot and the web port stay reproducible.
+struct MovingDef { let axis: MoveAxis; let range: Double; let speed: Double; let phase: Double }
+
+struct PlatformDef {
+    let col: Int; let row: Int; let w: Int; let h: Int
+    let moving: MovingDef?
+    init(col: Int, row: Int, w: Int, h: Int, moving: MovingDef? = nil) {
+        self.col = col; self.row = row; self.w = w; self.h = h; self.moving = moving
+    }
+}
 struct GemDef { let col: Int; let row: Int }
 struct EnemyDef { let spawnCol: Int; let row: Int; let minCol: Int; let maxCol: Int }
 
@@ -58,6 +73,12 @@ enum LevelData {
         var rng = SeededRNG(seed: UInt64(7919 + n * 101))
         func r() -> Double { rng.nextDouble() }
         func ri(_ a: Int, _ b: Int) -> Int { a + Int(r() * Double(b - a + 1)) }
+        // A small, jumpability-safe moving descriptor for a floating bonus ledge.
+        func makeMoving() -> MovingDef {
+            r() < 0.5
+                ? MovingDef(axis: .horizontal, range: Double(ri(2, 3)), speed: 1.3 + r() * 0.9, phase: r() * 6.2832)
+                : MovingDef(axis: .vertical, range: 1.0 + r() * 0.7, speed: 1.3 + r() * 0.9, phase: r() * 6.2832)
+        }
         let surf = 3
         var platforms: [PlatformDef] = []
         var gems: [GemDef] = []
@@ -68,6 +89,7 @@ enum LevelData {
         let sections = 5 + min(9, n + 2)
         let maxGap = min(5, 2 + (n >> 1))
         var enemyBudget = min(2 + n, 11)
+        var addedMoving = false
         for _ in 0..<sections {
             let gap = ri(2, maxGap); col += gap
             w = ri(6, 10)
@@ -78,7 +100,12 @@ enum LevelData {
             for _ in 0..<ri(1, 3) { gems.append(GemDef(col: col + ri(1, w - 2), row: surf + 1)) }
             if r() < 0.5 && w >= 5 {
                 let fw = ri(2, 3), fx = col + ri(1, max(1, w - fw - 1))
-                platforms.append(PlatformDef(col: fx, row: 6, w: fw, h: 1))
+                // From level 4 up, some bonus ledges drift on a path and carry the
+                // player. Only floating ledges move (never the ground route), so the
+                // gap≤5 / clearance≥3 invariants — and thus jumpability — hold.
+                let mv: MovingDef? = (n >= 4 && (!addedMoving || r() < 0.5)) ? makeMoving() : nil
+                if mv != nil { addedMoving = true }
+                platforms.append(PlatformDef(col: fx, row: 6, w: fw, h: 1, moving: mv))
                 for k in 0..<fw { gems.append(GemDef(col: fx + k, row: 7)) }
             }
             if enemyBudget > 0 && r() < 0.6 && w >= 5 {
@@ -87,6 +114,13 @@ enum LevelData {
                 enemyBudget -= 1
             }
             col += w
+        }
+        // Guarantee at least one moving platform from level 4 up (above ground A,
+        // 3-tile clearance, horizontal drift staying over solid ground).
+        if n >= 4 && !addedMoving {
+            platforms.append(PlatformDef(col: 4, row: 6, w: 3, h: 1,
+                moving: MovingDef(axis: .horizontal, range: 2.0, speed: 1.6, phase: 0)))
+            for k in 0..<3 { gems.append(GemDef(col: 4 + k, row: 7)) }
         }
         col += ri(2, min(4, maxGap)); w = 8
         platforms.append(PlatformDef(col: col, row: 0, w: w, h: 3))
