@@ -26,17 +26,18 @@ personal-best leaderboard.
 3. Global leaderboard — shared Cloudflare Worker (name/score/level/ts, top 20), light validation +
    per-IP rate-limit; web + iOS clients; personal best retained.
 
-### Status
+### Status — ✅ DONE (commit 5fc7124, pushed to ibrews/crystal-caper main)
 - [x] Moving platforms (iOS) / (web) — carry logic; deterministic sinusoid; L4+
 - [x] Boss (iOS) / (web) — telegraph→charge/projectile, 3 stomps, defeat→fireworks→goal reveal
 - [x] Leaderboard Worker + harness / web client / iOS client — URL-flag-gated, graceful
-- [x] README + Things to Try + Tools/README + REVIEW_NEEDED
+- [x] README + Things to Try + Tools/README + REVIEW_NEEDED + boss.png
 - [x] iOS build SUCCEEDED; on-device shots: moving platform (L6), boss (L5), L1 regression WIN
 - [x] Web vm-harness PASS (genLevel invariants + 1800+ loop frames); Worker round-trip PASS
       (in-process + live `wrangler dev` HTTP: submit→read, validation, CORS, rate-limit)
-- [~] Browser smoke (preview agent) — running
-- [ ] KB + timing log
-- [ ] Commit + push + Pages 200
+- [x] Browser smoke (preview agent) PASS all 3 — incl. full boss defeat loop + leaderboard
+      POST/GET round-trip + board render; zero console errors
+- [x] KB (projects/crystal-caper.md, 2 technique docs, daily, timing) committed + pushed
+- [x] Committed + pushed; GitHub Pages live with new code (HTTP 200, markers present)
 - [ ] Leaderboard PRODUCTION deploy = Alex's step (REVIEW_NEEDED.md); code verified, URL empty until then
 
 ### Env facts (verified this session)
