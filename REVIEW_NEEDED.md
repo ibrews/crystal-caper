@@ -34,7 +34,41 @@ Already verified locally (no account needed): `node leaderboard/test-worker.mjs`
 > (name ≤6 A–Z0–9, score 0–5M, level 1–9999) + a per-IP 2 s rate limit. It's a *fun*
 > board, not ranked competition — don't trust it for anything that matters.
 
-## 2. (Optional) Real PixelLab art for the boss
+## 2. TestFlight — blocked on your ASC credentials (device install already done)
+
+The app is **installed on your iPhone 15 Pro** (`com.ibrews.crystalcaper`, signed
+Apple Development: Alex Coulombe, team C624J4S2F8) — tap it to play. TestFlight,
+though, needs two things this never-shipped app lacks and that only you can supply:
+
+1. **App Store Connect issuer ID** — not stored on this Mac (only the `.p8` keys are:
+   `~/.private_keys/AuthKey_79HM47GZ7C.p8`, `AuthKey_AU4ZR3VHZN.p8`). Get it from
+   App Store Connect → Users and Access → Integrations → App Store Connect API (the
+   UUID at the top). Needed for every `altool`/ASC-API call.
+2. **An app record** for bundle id `com.ibrews.crystalcaper` (register the bundle id,
+   then create the app in ASC; confirm the Paid/Free agreements are active).
+
+Shipping prep already done: `ITSAppUsesNonExemptEncryption=false` in Info.plist
+(no export-compliance prompt), and distribution certs are present
+(`Apple Distribution: Agile Lens LLC`).
+
+**Once you paste the issuer ID + confirm the app record exists, the upload is:**
+```bash
+cd /Users/alex/dev/CrystalCaper
+xcodegen generate
+xcodebuild -project CrystalCaper.xcodeproj -scheme CrystalCaper -configuration Release \
+  -destination 'generic/platform=iOS' -archivePath build/CrystalCaper.xcarchive \
+  -allowProvisioningUpdates DEVELOPMENT_TEAM=C624J4S2F8 CODE_SIGN_STYLE=Automatic archive
+xcodebuild -exportArchive -archivePath build/CrystalCaper.xcarchive \
+  -exportPath build/export -exportOptionsPlist ExportOptions.plist -allowProvisioningUpdates
+xcrun altool --upload-app -f build/export/CrystalCaper.ipa -t ios \
+  --apiKey 79HM47GZ7C --apiIssuer <ISSUER_ID>
+```
+(`ExportOptions.plist` = app-store-connect method, team C624J4S2F8, automatic signing.)
+Tell me the issuer ID and I'll run this + watch it process. I held off because it
+needs your account credential — same "surface before provisioning" rule as the
+leaderboard backend.
+
+## 3. (Optional) Real PixelLab art for the boss
 
 "King Grumpcap" currently uses a hand-drawn procedural placeholder
 (`Assets.bossPlaceholder()` / the Canvas `drawBoss()`), deliberately, to conserve
