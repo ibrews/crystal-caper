@@ -6,7 +6,7 @@ A complete, playable 2D pixel-art **platformer for iOS**, built with SpriteKit �
 
 It's a showcase of the full **asset → game pipeline**: pixel art is generated on demand, dropped into the project, and wired into a physics-driven game with camera follow, parallax, particles, and a touch + keyboard control scheme.
 
-Built by **Alex Coulombe** at **[Agile Lens](https://agilelens.com)**.
+Built by **Alex Coulombe Presents** ([ibrews](https://github.com/ibrews)).
 
 ![Pip mid-jump over a crystal platform — title screen](docs/screenshots/title-jump.png)
 
